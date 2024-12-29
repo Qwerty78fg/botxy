@@ -8,7 +8,7 @@ import logging
 import sys
 import json
 import os
-from discord import ui
+from discord import ui, app_commands
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, encoding='utf-8')
 logger = logging.getLogger()
@@ -31,7 +31,9 @@ REDIRECT_URI = "http://localhost:5000/callback"
 
 intents = discord.Intents.default()
 intents.members = True
+intents.message_content = True
 bot = discord.Client(intents=intents)
+tree = discord.app_commands.CommandTree(bot)
 
 # Global variables
 data_ready_event = asyncio.Event()
@@ -80,6 +82,7 @@ def login_required(f):
 
 @bot.event
 async def on_ready():
+    await tree.sync()
     print(f'[DEBUG] Bot is logged in as {bot.user}')
     global members_data, roles_data
     if bot.guilds:
@@ -353,30 +356,26 @@ async def on_member_join(member):
         role = await guild.create_role(name=role_name)
         print(f'[DEBUG] Created role: {role_name}')
 
-    # Create embed with button - changed color to white
+@tree.command(name="create-verify", description="Creates a verification embed in the current channel")
+async def create_verify(interaction: discord.Interaction):
+    # Create embed
     embed = discord.Embed(
         title="Welcome!", 
-        description=f"Welcome to the server, {member.name}! Please verify your account by clicking the button below.", 
+        description="Please verify your account by clicking the button below.", 
         color=0xFFFFFF
     )
 
-    # Create the button view
+    # Create the button
     class VerifyButton(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=None)  # No timeout
             
-        @discord.ui.button(label="Verify Here", style=discord.ButtonStyle.gray)  # gray button
+        @discord.ui.button(label="Verify Here", style=discord.ButtonStyle.gray)
         async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.send_message("Please complete verification in your browser.", ephemeral=True)
-            await interaction.user.send(f"Here's your verification link: http://localhost:5000/invite")
+            await interaction.response.send_message(f"Click here to verify: http://localhost:5000/invite", ephemeral=True)
 
-    try:
-        await member.send(embed=embed, view=VerifyButton())
-        print(f'[DEBUG] Sent welcome DM with verification button to {member.name}')
-    except discord.Forbidden:
-        print(f'[ERROR] Could not send DM to {member.name}, they may have DMs disabled.')
-
-    # The role assignment will happen after verification thr /invite
+    await interaction.response.send_message(embed=embed, view=VerifyButton())
+    print(f'[DEBUG] Created verification embed in channel {interaction.channel.name}')
 
 @app.route('/login', methods=['POST'])
 def login():
